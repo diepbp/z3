@@ -5,8 +5,7 @@
 #include <set>
 #include <stack>
 #include <map>
-#include <vector>
-#include <strhash.h>
+#include <vector> 
 #include "ast/arith_decl_plugin.h"
 #include "ast/array_decl_plugin.h"
 #include "ast/ast_pp.h"
@@ -157,7 +156,7 @@ namespace smt {
                 asserting_constraints.reset();
                 reassertEQ = true;
                 reassertDisEQ = true;
-                for (int i = 0; i < other.asserting_constraints.size(); ++i)
+                for (unsigned i = 0; i < other.asserting_constraints.size(); ++i)
                     asserting_constraints.push_back(other.asserting_constraints[i]);
 
                 STRACE("str", tout << __LINE__ <<  " *** " << __FUNCTION__ << ":  eq_combination: " << other.eq_combination.size() << " --> " << eq_combination.size() << std::endl;);
