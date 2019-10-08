@@ -340,11 +340,11 @@ namespace smt {
                 rational string_to_int(zstring str, bool &valid);
                 int eval_invalid_str2int(expr* e, expr* &eq_node);
             bool eval_int2str(app * a);
-            void init_chain_free(obj_map<expr, int> &non_fresh_vars, obj_map<expr, ptr_vector<expr>> &eq_combination);
+            bool init_chain_free(obj_map<expr, int> &non_fresh_vars, obj_map<expr, ptr_vector<expr>> &eq_combination);
                 bool analyze_upper_bound_str_int();
                 rational log_10(rational n);
                 rational ten_power(rational n);
-            void refined_init_chain_free(obj_map<expr, int> &non_fresh_vars, obj_map<expr, ptr_vector<expr>> &eq_combination);
+            bool refined_init_chain_free(obj_map<expr, int> &non_fresh_vars, obj_map<expr, ptr_vector<expr>> &eq_combination);
                 void refine_not_contain_vars(obj_map<expr, int> &non_fresh_vars, obj_map<expr, ptr_vector<expr>> const& eq_combination);
                 bool is_not_important(expr* haystack, zstring needle, obj_map<expr, ptr_vector<expr>> const& eq_combination, obj_map<expr, int> const& non_fresh_vars);
                 bool appear_in_eq(expr* haystack, zstring needle, ptr_vector<expr> const& s, obj_map<expr, int> const& non_fresh_vars);
@@ -473,6 +473,8 @@ namespace smt {
                 expr* find_equivalent_variable(expr* e);
                 bool is_internal_var(expr* e);
                 bool is_internal_regex_var(expr* e, expr* &regex);
+                bool is_internal_regex_var(expr* e);
+                bool is_splitable_regex(expr* e);
                 /*
                 * (abc)*__XXX -> abc
                 */
@@ -991,6 +993,8 @@ namespace smt {
                 bool propagate_equality_left_2_right(expr* lhs, expr* rhs, int &prefix, expr_ref_vector &and_lhs, expr_ref_vector &to_assert);
 
             obj_map<expr, int> collect_non_fresh_vars();
+            expr_set collect_non_ineq_vars();
+            expr_set collect_needles();
             void collect_non_fresh_vars_str_int(obj_map<expr, int> &vars);
             void add_non_fresh_var(expr* const &e, obj_map<expr, int> &vars, int len);
             void update_string_int_vars(expr* v, obj_hashtable<expr> &s);
@@ -1002,19 +1006,19 @@ namespace smt {
                     bool is_var_var_inequality(expr* x, expr* y);
                 expr* create_conjuct_all_inequalities(expr* nn);
                     bool is_trivial_inequality(expr* n, zstring s);
-                bool collect_not_contains(expr* nn);
+                bool collect_not_contains(expr* nn, expr_set const& ineq_vars, expr_set const& needles);
+                    bool is_haystack(expr* nn);
+                    bool is_needle(expr* nn);
                 bool more_than_two_occurrences(expr* n, obj_map<expr, int> const& occurrences);
-                bool is_non_fresh_occurrences(expr *nn, obj_map<expr, int> const &occurrences, int &len);
+                bool is_non_fresh_occurrence(expr *nn, obj_map<expr, int> const &occurrences, expr_set const& ineq_vars, expr_set const& needles, int &len);
                 bool is_non_fresh_recheck(expr *nn, int len, obj_map<expr, ptr_vector<expr>> const& combinations);
                 obj_map<expr, int> count_occurrences_from_root();
                         bool is_replace_var(expr* x);
                     obj_map<expr, int> count_occurrences_from_combination(obj_map<expr, ptr_vector<expr>> const &eq_combination, obj_map<expr, int> const &non_fresh_vars);
             void print_all_assignments();
             void print_guessed_literals();
-            obj_map<expr, ptr_vector<expr>> normalize_eq(expr_ref_vector &subNodes, obj_map<expr, int> &non_fresh_vars);
+            obj_map<expr, ptr_vector<expr>> normalize_eq(expr_ref_vector &subNodes, obj_map<expr, int> &non_fresh_vars, bool &axiom_added);
             obj_map<expr, ptr_vector<expr>> refine_eq_combination(obj_map<expr, int> &non_fresh_vars, obj_map<expr, ptr_vector<expr>> const& combinations, expr_ref_vector const& subNodes);
-
-                obj_map<expr, ptr_vector<expr>> refine_eq_combination(obj_map<expr, int> &non_fresh_vars, obj_map<expr, ptr_vector<expr>> combinations, expr_ref_vector subNodes, expr_ref_vector notnon_fresh_vars);
 
                 bool can_merge_combination(obj_map<expr, ptr_vector<expr>> const& combinations);
                     bool concat_in_set(expr* n, ptr_vector<expr> const& s);
@@ -1032,7 +1036,7 @@ namespace smt {
                     ptr_vector<expr> refine_eq_set(ptr_vector<expr> const& s, obj_map<expr, int> const& non_fresh_vars);
                 bool is_non_fresh(expr *n, obj_map<expr, int> const &non_fresh_vars);
                 bool is_non_fresh(expr *n, obj_map<expr, int> const &non_fresh_vars, int &l);
-                ptr_vector<expr> extend_object(expr* object, obj_map<expr, ptr_vector<expr>> &combinations, expr_ref_vector &subNodes, expr_ref_vector parents, obj_map<expr, int> non_fresh_vars);
+                ptr_vector<expr> extend_object(expr* object, obj_map<expr, ptr_vector<expr>> &combinations, expr_ref_vector &subNodes, expr_ref_vector const& parents, obj_map<expr, int> const& non_fresh_vars);
                     expr* create_concat_with_concat(expr* n1, expr* n2);
                     expr* create_concat_with_str(expr* n, zstring str);
                     expr* create_concat_with_str(zstring str, expr* n);
@@ -1047,7 +1051,7 @@ namespace smt {
 
         void assert_cached_eq_state();
         void handle_equality(expr * lhs, expr * rhs);
-            bool new_eq_check_wrt_disequalities(expr* n, zstring containKey, expr_ref conclusion);
+            bool new_eq_check_wrt_disequalities(expr* n, zstring containKey, expr_ref conclusion, obj_hashtable<expr> &checked_nodes);
             void special_assertion_for_contain_vs_substr(expr* lhs, expr* rhs);
             expr_ref_vector collect_all_empty_start(expr* lhs, expr* rhs);
             expr_ref_vector collect_all_empty_end(expr* lhs, expr* rhs);
@@ -1248,7 +1252,7 @@ namespace smt {
         expr_ref_vector                                     m_delayed_assertions_todo;
 
         // enode lists for library-aware/high-level string terms (e.g. substr, contains)
-        ptr_vector<enode>                                   m_library_aware_axiom_todo;
+        obj_hashtable<enode>                                m_library_aware_axiom_todo;
         obj_hashtable<expr>                                 input_var_in_len;
         expr_ref_vector                                     string_int_conversion_terms;
         obj_hashtable<expr>                                 string_int_axioms;
